@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard Salud Mental</title>
+</head>
+<body>
+    <h1>Dashboard del Centro de Salud Mental</h1>
+    <p>Total de pacientes: {{ pacientes_count }}</p>
+    <p>Total de consultas: {{ consultas_count }}</p>
+
+    <h2>Diagnósticos más comunes</h2>
+    <ul>
+        {% for d in diagnosticos_top %}
+            <li>{{ d.diagnostico }}: {{ d.total }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

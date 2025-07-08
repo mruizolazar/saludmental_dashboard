@@ -1,0 +1,18 @@
+# Entornos virtuales
+venv/
+
+# Archivos Python cache
+__pycache__/
+*.pyc
+
+# Archivos de configuración locales
+*.sqlite3
+.env
+
+# Archivos de VSCode y macOS
+.vscode/
+.DS_Store
+
+# Archivos de migraciones (opcional)
+*/migrations/__pycache__/
+
