@@ -18,3 +18,5 @@ class Consulta(models.Model):
 
     class Meta:
         db_table = 'consultas'
+        
+        
