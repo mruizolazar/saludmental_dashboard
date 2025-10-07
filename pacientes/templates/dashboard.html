@@ -2,149 +2,331 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <title>Dashboard Salud Mental</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
+  <meta charset="UTF-8" />
+  <title>Dashboard Salud Mental</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+  <!-- Chart.js + fechas + zoom + annotation -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+
+  <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
+  <style>
+    .card-stats { padding:12px; border-radius:14px; }
+    .loader{display:inline-block;width:16px;height:16px;border:2px solid #ddd;border-top-color:#0d6efd;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .chart-fixed,.chart-fixed-sm{position:relative;width:100%;overflow:hidden}
+    .chart-fixed{height:420px;max-height:420px}
+    .chart-fixed-sm{height:260px;max-height:260px}
+    .chart-fixed canvas,.chart-fixed-sm canvas{width:100%!important;height:100%!important}
+
+    #pacienteSelect{min-width:360px;font-size:.9rem}
+    #openApi,#resetZoom{font-size:.8rem;padding:.25rem .5rem}
+  </style>
 </head>
 <body class="bg-light text-dark">
 
 <div class="container py-4">
-    <h1 class="mb-4 text-center">🧠 Dashboard del Centro de Salud Mental</h1>
+  <h1 class="mb-4 text-center">🧠 Dashboard del Centro de Salud Mental</h1>
 
-    <!-- Filtros -->
-    <form method="get" class="row g-3 mb-4 align-items-end">
-        <div class="col-md-2">
-            <label class="form-label">Sexo</label>
-            <select name="sexo" class="form-select">
-                <option value="" {% if not filtro_sexo %}selected{% endif %}>Todos</option>
-                <option value="Femenino" {% if filtro_sexo == "Femenino" %}selected{% endif %}>Femenino</option>
-                <option value="Masculino" {% if filtro_sexo == "Masculino" %}selected{% endif %}>Masculino</option>
-                <option value="Otro" {% if filtro_sexo == "Otro" %}selected{% endif %}>Otro</option>
+  <!-- Filtros -->
+  <form method="get" class="row g-3 mb-4 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label">Sexo</label>
+      <select name="sexo" class="form-select">
+        <option value="" {% if not filtro_sexo %}selected{% endif %}>Todos</option>
+        <option value="Femenino" {% if filtro_sexo == "Femenino" %}selected{% endif %}>Femenino</option>
+        <option value="Masculino" {% if filtro_sexo == "Masculino" %}selected{% endif %}>Masculino</option>
+        <option value="Otro" {% if filtro_sexo == "Otro" %}selected{% endif %}>Otro</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Desde</label>
+      <input type="date" name="desde" class="form-control" value="{{ filtro_desde }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Hasta</label>
+      <input type="date" name="hasta" class="form-control" value="{{ filtro_hasta }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Prontuario</label>
+      <input list="lista_prontuarios" name="prontuario" class="form-control" placeholder="Buscar prontuario..." value="{{ filtro_prontuario }}">
+      <datalist id="lista_prontuarios">
+        {% for nro in todos_los_prontuarios %}<option value="{{ nro }}"></option>{% endfor %}
+      </datalist>
+    </div>
+    <div class="col-md-1 d-flex gap-2">
+      <button type="submit" class="btn btn-primary flex-grow-1">Aplicar</button>
+      <a href="{% url 'dashboard' %}" class="btn btn-secondary flex-grow-1">Limpiar</a>
+    </div>
+  </form>
+
+  <!-- KPIs -->
+  <div class="row mb-4">
+    <div class="col-md-3"><div class="card card-stats border-start border-info shadow-sm text-center"><h6 class="text-muted">Total de Pacientes</h6><h3>{{ pacientes_count }}</h3></div></div>
+    <div class="col-md-3"><div class="card card-stats border-start border-success shadow-sm text-center"><h6 class="text-muted">Total de Consultas</h6><h3>{{ consultas_count }}</h3></div></div>
+    <div class="col-md-3"><div class="card card-stats border-start border-warning shadow-sm text-center"><h6 class="text-muted">Ansiedad / Pánico</h6><h3>{{ ansiedad_count }}</h3></div></div>
+    <div class="col-md-3"><div class="card card-stats border-start border-danger shadow-sm text-center"><h6 class="text-muted">Depresión</h6><h3>{{ depresion_count }}</h3></div></div>
+  </div>
+
+  <!-- Gráficos superiores -->
+  <div class="row g-4">
+    <div class="col-md-6">
+      <div class="card p-3 shadow-sm">
+        <h5 class="mb-3 text-center">Pacientes por Sexo</h5>
+        <div class="chart-fixed-sm"><canvas id="sexoChart"></canvas></div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card p-3 shadow-sm">
+        <h5 class="mb-3 text-center">Diagnósticos más Comunes</h5>
+        <div class="chart-fixed-sm"><canvas id="diagnosticosChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evolución -->
+  <div class="row g-4 mt-4">
+    <div class="col-12">
+      <div class="card p-3 shadow-sm">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+          <h5 class="mb-0">Evolución del Riesgo del Paciente</h5>
+          <div class="d-flex gap-2 align-items-center">
+            <label for="pacienteSelect" class="form-label mb-0">Paciente:</label>
+            <select id="pacienteSelect" class="form-select d-inline-block w-auto">
+              {% for p in pacientes_map %}
+                <option value="{{ p.paciente_id }}">{{ p.numero_historia }} (ID {{ p.paciente_id }})</option>
+              {% endfor %}
             </select>
+            <button id="openApi"  type="button" class="btn btn-outline-secondary btn-sm">Ver JSON</button>
+            <button id="resetZoom" type="button" class="btn btn-outline-secondary btn-sm">Reset zoom</button>
+          </div>
         </div>
-        <div class="col-md-3">
-            <label class="form-label">Desde</label>
-            <input type="date" name="desde" class="form-control" value="{{ filtro_desde }}">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Hasta</label>
-            <input type="date" name="hasta" class="form-control" value="{{ filtro_hasta }}">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Prontuario</label>
-            <input list="lista_prontuarios" name="prontuario" class="form-control" placeholder="Buscar prontuario..." value="{{ filtro_prontuario }}">
-            <datalist id="lista_prontuarios">
-                {% for nro in todos_los_prontuarios %}
-                    <option value="{{ nro }}"></option>
-                {% endfor %}
-            </datalist>
-        </div>
-        <div class="col-md-1 d-flex gap-2">
-            <button type="submit" class="btn btn-primary flex-grow-1">Aplicar</button>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary flex-grow-1">Limpiar</a>
-        </div>
-    </form>
-
-    <!-- Indicadores -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card card-stats border-start border-info shadow-sm text-center">
-                <h6 class="text-muted">Total de Pacientes</h6>
-                <h3>{{ pacientes_count }}</h3>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card card-stats border-start border-success shadow-sm text-center">
-                <h6 class="text-muted">Total de Consultas</h6>
-                <h3>{{ consultas_count }}</h3>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card card-stats border-start border-warning shadow-sm text-center">
-                <h6 class="text-muted">Ansiedad / Pánico</h6>
-                <h3>{{ ansiedad_count }}</h3>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card card-stats border-start border-danger shadow-sm text-center">
-                <h6 class="text-muted">Depresión</h6>
-                <h3>{{ depresion_count }}</h3>
-            </div>
-        </div>
+        <div class="chart-fixed"><canvas id="evolPaciente"></canvas></div>
+        <div id="msgEvol" class="small text-muted mt-2"></div>
+      </div>
     </div>
-
-    <!-- Gráficos -->
-    <div class="row g-4">
-        <div class="col-md-6">
-            <div class="card p-3 shadow-sm">
-                <h5 class="mb-3 text-center">Pacientes por Sexo</h5>
-                <canvas id="sexoChart"></canvas>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card p-3 shadow-sm">
-                <h5 class="mb-3 text-center">Diagnósticos más Comunes</h5>
-                <canvas id="diagnosticosChart"></canvas>
-            </div>
-        </div>
-    </div>
+  </div>
 </div>
 
-<!-- Scripts de Chart.js -->
+<!-- Scripts -->
 <script>
-    const ctxSexo = document.getElementById('sexoChart');
-    if (ctxSexo) {
-        new Chart(ctxSexo, {
-            type: 'pie',
-            data: {
-                labels: {{ sexo_labels|safe }},
-                datasets: [{
-                    label: 'Pacientes por sexo',
-                    data: {{ sexo_data|safe }},
-                    backgroundColor: ['#74c0fc', '#63e6be', '#ffd43b'],
-                    borderColor: '#fff',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-    }
+  // Registrar plugins externos (UMD)
+  try { if (window['chartjs-plugin-zoom']) Chart.register(window['chartjs-plugin-zoom']); } catch(e){}
+  try { if (window['chartjs-plugin-annotation']) Chart.register(window['chartjs-plugin-annotation']); } catch(e){}
 
-    const ctxDiag = document.getElementById('diagnosticosChart');
-    if (ctxDiag) {
-        new Chart(ctxDiag, {
-            type: 'bar',
-            data: {
-                labels: {{ diag_labels|safe }},
-                datasets: [{
-                    label: 'Frecuencia',
-                    data: {{ diag_data|safe }},
-                    backgroundColor: '#339af0'
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { stepSize: 1 }
-                    }
-                },
-                plugins: {
-                    legend: { display: false }
-                }
-            }
-        });
+  // Pie
+  (function(){
+    const el = document.getElementById('sexoChart'); if(!el) return;
+    const labels = {{ sexo_labels|default:'[]'|safe }};
+    const data   = {{ sexo_data|default:'[]'|safe }};
+    new Chart(el,{
+      type:'pie',
+      data:{labels,datasets:[{label:'Pacientes por sexo',data,backgroundColor:['#74c0fc','#63e6be','#ffd43b'],borderColor:'#fff',borderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}
+    });
+  })();
+
+  // Barras
+  (function(){
+    const el = document.getElementById('diagnosticosChart'); if(!el) return;
+    const labels = {{ diag_labels|default:'[]'|safe }};
+    const data   = {{ diag_data|default:'[]'|safe }};
+    new Chart(el,{
+      type:'bar',
+      data:{labels,datasets:[{label:'Frecuencia',data,backgroundColor:'#339af0'}]},
+      options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,ticks:{stepSize:1}}},plugins:{legend:{display:false}}}
+    });
+  })();
+
+  // Utils
+  const DAY_MS = 24*60*60*1000;
+  const toNum = v => (v===null||v===undefined||v==='') ? null : (Number(v));
+  function movingAvg(arr, k=3){
+    if(!Array.isArray(arr)||!arr.length) return [];
+    const h=Math.floor(k/2);
+    return arr.map((_,i)=>{
+      let a=Math.max(0,i-h), b=Math.min(arr.length-1,i+h),sum=0,n=0;
+      for(let j=a;j<=b;j++){ const v=toNum(arr[j]); if(v!==null && Number.isFinite(v)){ sum+=v; n++; } }
+      return n?sum/n:null;
+    });
+  }
+
+  // Franjas POS/NEU/NEG
+  const yBands = {
+    id:'yBands',
+    beforeDraw(chart){
+      const area=chart.chartArea, y=chart.scales?.y, ctx=chart.ctx;
+      if(!area||!y||!y.getPixelForValue) return;
+      const y0=y.getPixelForValue(0), y1=y.getPixelForValue(1), y2=y.getPixelForValue(2);
+      ctx.save();
+      ctx.fillStyle='rgba(40,167,69,.07)'; ctx.fillRect(area.left, Math.min(y0,y1), area.right-area.left, Math.abs(y0-y1));
+      ctx.fillStyle='rgba(108,117,125,.07)'; ctx.fillRect(area.left, Math.min(y1,y2), area.right-area.left, Math.abs(y1-y2));
+      ctx.fillStyle='rgba(220,53,69,.07)'; ctx.fillRect(area.left, area.top, area.right-area.left, Math.abs(y2-area.top));
+      ctx.restore();
     }
+  };
+
+  // Evolución
+  let isLoading=false, evolChart=null, apiURL=null;
+
+  function apiUrlFor(id){ return new URL(`/api/pacientes/${id}/evolucion/`, location.origin).toString(); }
+
+  async function cargarGrafico(pid){
+    if(isLoading) return; isLoading=true;
+    const info=document.getElementById('msgEvol');
+    const can = document.getElementById('evolPaciente');
+    const ctx = can.getContext('2d');
+    apiURL = apiUrlFor(pid);
+    document.getElementById('openApi').onclick = ()=> window.open(apiURL,'_blank');
+    info.innerHTML = '<span class="loader"></span> Cargando…';
+
+    try{
+      const existing=Chart.getChart(can); if(existing) existing.destroy();
+      if(evolChart){evolChart.destroy(); evolChart=null;}
+
+      const r=await fetch(apiURL,{headers:{'Accept':'application/json'}});
+      if(!r.ok){ throw new Error(`HTTP ${r.status}`); }
+      const json=await r.json();
+
+      // Convertir a puntos temporales {x:Date,y:Number} y ordenar
+      const labels = (json.labels||[]).map(s=>new Date(s));
+      const riesgo = (json.riesgo||[]).map(toNum);
+      const meds   = json.meds||[];
+
+      if(!labels.length || !riesgo.length){ info.textContent='Sin datos para este paciente.'; return; }
+
+      // Orden temporal
+      const idx = labels.map((d,i)=>({i,d})).sort((a,b)=>a.d-b.d).map(o=>o.i);
+      const pts  = idx.map(i=>({x:labels[i], y: riesgo[i]}));
+      const medsS= idx.map(i=> meds[i]||[]);
+      // Negativos
+      const negEvents = pts.filter(p => p.y===2).map(p => ({x:p.x, y:2}));
+
+      // Suavizado sobre y (ordenado)
+      const suav = movingAvg(pts.map(p=>p.y), 3);
+
+      // Anotaciones de abandono (>60 días entre consultas)
+      const annots = [];
+      for(let i=1;i<pts.length;i++){
+        const gap = pts[i].x - pts[i-1].x;
+        if(gap > 60*DAY_MS){
+          annots.push({
+            type:'line',
+            xMin: pts[i-1].x, xMax: pts[i-1].x,
+            borderColor:'rgba(0,0,0,.3)', borderDash:[4,4], borderWidth:1,
+            label:{enabled:true, content:'Desistió (>60 días sin consulta)', position:'start', yAdjust:-10, backgroundColor:'rgba(255,255,255,.8)', color:'#333', padding:4}
+          });
+        }
+      }
+
+      evolChart = new Chart(ctx,{
+        type:'line',
+        data:{
+          datasets:[
+            {
+              label:'Riesgo (0=POS, 1=NEU, 2=NEG)',
+              data: pts,
+              parsing:false,
+              stepped:true,
+              borderWidth:2,
+              pointRadius:3,
+              pointHoverRadius:6,
+              tension:0,
+              spanGaps:true,
+              borderColor:'#0d6efd',
+              backgroundColor:'rgba(13,110,253,.05)'
+            },
+            {
+              label:'Suavizado (k=3)',
+              data: pts.map((p,i)=> ({x:p.x, y: suav[i]})),
+              parsing:false,
+              borderWidth:2,
+              pointRadius:0,
+              borderDash:[6,4],
+              tension:0.25,
+              spanGaps:true,
+              borderColor:'#6c757d'
+            },
+            {
+              type:'scatter',
+              label:'Eventos NEG',
+              data: negEvents,
+              parsing:false,
+              showLine:false,
+              pointRadius:6,
+              pointHoverRadius:7,
+              pointStyle:'cross',
+              borderColor:'#dc3545',
+              backgroundColor:'#dc3545'
+            }
+          ]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          parsing:false,
+          normalized:true,
+          plugins:{
+            legend:{position:'bottom'},
+            tooltip:{
+              callbacks:{
+                title:(items)=> {
+                  const p = items[0]?.raw;
+                  const y = p?.y ?? 0;
+                  const nivel = ['POS (bajo)','NEU (medio)','NEG (alto)'][y] || y;
+                  const d = p?.x ? new Date(p.x) : null;
+                  return d ? d.toISOString().slice(0,10)+' — '+nivel : nivel;
+                },
+                afterBody:(items)=>{
+                  const p = items[0];
+                  if(!p) return [];
+                  const idx = pts.findIndex(pt => +pt.x === +p.raw.x);
+                  const lista = medsS[idx] || [];
+                  return lista.length ? ['Medicamentos:', ...lista.map(m=>'• '+m)] : [];
+                }
+              }
+            },
+            zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} },
+            annotation:{ annotations: annots }
+          },
+          scales:{
+            x:{ type:'time', time:{unit:'month', displayFormats:{month:'MMM yyyy'}}, grid:{color:'#eef1f5'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:8} },
+            y:{ min:0, max:2, ticks:{ stepSize:1, callback:v=>({0:'POS (bajo)',1:'NEU (medio)',2:'NEG (alto)'}[v] ?? v) }, grid:{color:'#e9ecef'} }
+          }
+        },
+        plugins:[yBands]
+      });
+
+      document.getElementById('resetZoom').onclick = ()=> evolChart.resetZoom();
+      info.textContent='';
+    }catch(err){
+      const existing=Chart.getChart(can); if(existing) existing.destroy();
+      if(evolChart){evolChart.destroy();evolChart=null;}
+      console.error(err);
+      document.getElementById('msgEvol').textContent='No se pudo cargar el gráfico: '+(err?.message||err);
+    }finally{
+      isLoading=false;
+    }
+  }
+
+  // Init
+  (function(){
+    const select=document.getElementById('pacienteSelect');
+    const initialId={{ initial_paciente_id|default:'null' }};
+    const info=document.getElementById('msgEvol');
+
+    if(!select || !select.options.length){
+      if(initialId!==null) cargarGrafico(initialId); else info.textContent='No hay pacientes con consultas para mostrar.'; return;
+    }
+    if(initialId!==null){ select.value=String(initialId); cargarGrafico(initialId); }
+    else { info.textContent='No hay pacientes con consultas para mostrar.'; }
+
+    select.addEventListener('change', e=> cargarGrafico(e.target.value));
+  })();
 </script>
 
 </body>
