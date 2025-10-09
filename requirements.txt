@@ -1,4 +1,14 @@
-asgiref==3.9.0
+# --- Framework web
 Django==5.2.4
-psycopg2-binary==2.9.10
-sqlparse==0.5.3
+
+# --- PostgreSQL (binario: fácil de instalar en Windows/Mac/Linux)
+psycopg2-binary==2.9.9
+
+# --- Importadores de Excel / CSV (para comandos de importación)
+pandas==2.2.3
+openpyxl==3.1.5
+numpy==2.0.2
+python-dateutil==2.9.0.post0
+
+# --- Configuración con variables de entorno
+python-dotenv==1.0.1
