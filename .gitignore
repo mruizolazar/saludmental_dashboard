@@ -4,6 +4,8 @@ venv/
 # Archivos Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
 # Archivos de configuración locales
 *.sqlite3
@@ -16,3 +18,9 @@ __pycache__/
 # Archivos de migraciones (opcional)
 */migrations/__pycache__/
 
+# Django: archivos generados
+/staticfiles/
+/media/
+
+# Archivos temporales o logs
+*.log
