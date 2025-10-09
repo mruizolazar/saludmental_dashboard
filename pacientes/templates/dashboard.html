@@ -4,36 +4,53 @@
 <head>
   <meta charset="UTF-8" />
   <title>Dashboard Salud Mental</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-
-  <!-- Chart.js + fechas + zoom + annotation -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Chart.js + zoom + annotation -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
 
-  <link rel="stylesheet" href="{% static 'css/dashboard.css' %}" />
   <style>
-    .card-stats { padding:12px; border-radius:14px; }
-    .loader{display:inline-block;width:16px;height:16px;border:2px solid #ddd;border-top-color:#0d6efd;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle}
-    @keyframes spin{to{transform:rotate(360deg)}}
+    :root{
+      --h-card-charts: 520px;
+      --h-card-evol:   560px;
+      --pie-min:       360px;
+    }
+    body{ background:#f5f7fb; }
+    .kpi-card{border-left:4px solid #0d6efd;border-radius:.75rem;box-shadow:0 3px 10px rgba(0,0,0,.06)}
+    .kpi-card .kpi-num{font-size:2rem;font-weight:700;color:#0d6efd}
+    .kpi-warning{border-left-color:#f59f00}.kpi-warning .kpi-num{color:#f59f00}
+    .kpi-danger{border-left-color:#e03131}.kpi-danger .kpi-num{color:#e03131}
+    .kpi-success{border-left-color:#2f9e44}.kpi-success .kpi-num{color:#2f9e44}
+    .card{border:0;border-radius:1rem;box-shadow:0 6px 18px rgba(0,0,0,.06)}
 
-    .chart-fixed,.chart-fixed-sm{position:relative;width:100%;overflow:hidden}
-    .chart-fixed{height:420px;max-height:420px}
-    .chart-fixed-sm{height:260px;max-height:260px}
-    .chart-fixed canvas,.chart-fixed-sm canvas{width:100%!important;height:100%!important}
+    .chart-box{height:var(--h-card-charts)}
+    .evol-box{height:var(--h-card-evol); overflow:visible;}
 
-    #pacienteSelect{min-width:360px;font-size:.9rem}
-    #openApi,#resetZoom{font-size:.8rem;padding:.25rem .5rem}
+    /* pie siempre circular y centrado */
+    .square-wrap{display:grid;place-items:center;height:100%;width:100%;}
+    .square-wrap canvas{
+      width:100%;max-width:720px;aspect-ratio:1/1;height:auto;min-height:var(--pie-min);
+    }
+
+    @media (max-width: 992px){
+      :root{ --h-card-charts: 420px; --h-card-evol: 520px; --pie-min:300px; }
+    }
+    .legend-note{font-size:.8rem;color:#6c757d}
   </style>
 </head>
-<body class="bg-light text-dark">
+<body class="text-dark">
 
 <div class="container py-4">
-  <h1 class="mb-4 text-center">🧠 Dashboard del Centro de Salud Mental</h1>
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <span style="font-size:1.9rem">🧠</span>
+    <h1 class="m-0 fw-bold">Dashboard del Centro de Salud Mental</h1>
+  </div>
 
   <!-- Filtros -->
-  <form method="get" class="row g-3 mb-4 align-items-end">
+  <form method="get" class="row g-3 align-items-end mb-3">
     <div class="col-md-2">
       <label class="form-label">Sexo</label>
       <select name="sexo" class="form-select">
@@ -55,278 +72,334 @@
       <label class="form-label">Prontuario</label>
       <input list="lista_prontuarios" name="prontuario" class="form-control" placeholder="Buscar prontuario..." value="{{ filtro_prontuario }}">
       <datalist id="lista_prontuarios">
-        {% for nro in todos_los_prontuarios %}<option value="{{ nro }}"></option>{% endfor %}
+        {% for nro in todos_los_prontuarios %}
+          <option value="{{ nro }}"></option>
+        {% endfor %}
       </datalist>
     </div>
     <div class="col-md-1 d-flex gap-2">
-      <button type="submit" class="btn btn-primary flex-grow-1">Aplicar</button>
-      <a href="{% url 'dashboard' %}" class="btn btn-secondary flex-grow-1">Limpiar</a>
+      <button type="submit" class="btn btn-primary w-100">Aplicar</button>
+      <a href="{% url 'dashboard' %}" class="btn btn-secondary w-100">Limpiar</a>
     </div>
   </form>
 
   <!-- KPIs -->
-  <div class="row mb-4">
-    <div class="col-md-3"><div class="card card-stats border-start border-info shadow-sm text-center"><h6 class="text-muted">Total de Pacientes</h6><h3>{{ pacientes_count }}</h3></div></div>
-    <div class="col-md-3"><div class="card card-stats border-start border-success shadow-sm text-center"><h6 class="text-muted">Total de Consultas</h6><h3>{{ consultas_count }}</h3></div></div>
-    <div class="col-md-3"><div class="card card-stats border-start border-warning shadow-sm text-center"><h6 class="text-muted">Ansiedad / Pánico</h6><h3>{{ ansiedad_count }}</h3></div></div>
-    <div class="col-md-3"><div class="card card-stats border-start border-danger shadow-sm text-center"><h6 class="text-muted">Depresión</h6><h3>{{ depresion_count }}</h3></div></div>
-  </div>
-
-  <!-- Gráficos superiores -->
-  <div class="row g-4">
-    <div class="col-md-6">
-      <div class="card p-3 shadow-sm">
-        <h5 class="mb-3 text-center">Pacientes por Sexo</h5>
-        <div class="chart-fixed-sm"><canvas id="sexoChart"></canvas></div>
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card p-3 kpi-card kpi-success text-center">
+        <div class="text-muted">Total de Pacientes</div>
+        <div class="kpi-num">{{ pacientes_count }}</div>
       </div>
     </div>
-    <div class="col-md-6">
-      <div class="card p-3 shadow-sm">
-        <h5 class="mb-3 text-center">Diagnósticos más Comunes</h5>
-        <div class="chart-fixed-sm"><canvas id="diagnosticosChart"></canvas></div>
+    <div class="col-md-3">
+      <div class="card p-3 kpi-card text-center">
+        <div class="text-muted">Total de Consultas</div>
+        <div class="kpi-num">{{ consultas_count }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 kpi-card kpi-warning text-center">
+        <div class="text-muted">Ansiedad / Pánico</div>
+        <div class="kpi-num">{{ ansiedad_count }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 kpi-card kpi-danger text-center">
+        <div class="text-muted">Depresión</div>
+        <div class="kpi-num">{{ depresion_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts fila 1 -->
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <h5 class="mb-2 text-center">Pacientes por Sexo</h5>
+        <div class="chart-box">
+          <div class="square-wrap">
+            <canvas id="sexoChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <h5 class="mb-2 text-center">Diagnósticos más Comunes</h5>
+        <div class="chart-box">
+          <canvas id="diagnosticosChart"></canvas>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Evolución -->
-  <div class="row g-4 mt-4">
-    <div class="col-12">
-      <div class="card p-3 shadow-sm">
-        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-          <h5 class="mb-0">Evolución del Riesgo del Paciente</h5>
-          <div class="d-flex gap-2 align-items-center">
-            <label for="pacienteSelect" class="form-label mb-0">Paciente:</label>
-            <select id="pacienteSelect" class="form-select d-inline-block w-auto">
-              {% for p in pacientes_map %}
-                <option value="{{ p.paciente_id }}">{{ p.numero_historia }} (ID {{ p.paciente_id }})</option>
-              {% endfor %}
-            </select>
-            <button id="openApi"  type="button" class="btn btn-outline-secondary btn-sm">Ver JSON</button>
-            <button id="resetZoom" type="button" class="btn btn-outline-secondary btn-sm">Reset zoom</button>
-          </div>
+  <div class="card p-3 mb-4">
+    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+      <h5 class="m-0">Evolución del Riesgo del Paciente</h5>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="d-flex align-items-center gap-2">
+          <span class="text-muted">Paciente:</span>
+          <select id="selectPaciente" class="form-select" style="min-width:260px">
+            {% for p in pacientes_map %}
+              <option value="{{ p.paciente_id }}" {% if p.paciente_id == initial_paciente_id %}selected{% endif %}>
+                {{ p.numero_historia }} (ID {{ p.paciente_id }})
+              </option>
+            {% endfor %}
+          </select>
         </div>
-        <div class="chart-fixed"><canvas id="evolPaciente"></canvas></div>
-        <div id="msgEvol" class="small text-muted mt-2"></div>
+
+        <div class="d-flex align-items-center gap-2">
+          <span class="text-muted">Medicamento:</span>
+          <select id="selectMed" class="form-select" style="min-width:220px">
+            <option value="">Todos</option>
+            {% if med_list %}
+              {% for m in med_list %}
+                <option value="{{ m }}">{{ m }}</option>
+              {% endfor %}
+            {% else %}
+              <option value="" disabled>(Sin medicamentos en el filtro actual)</option>
+            {% endif %}
+          </select>
+          <button id="btnMedClear" type="button" class="btn btn-outline-secondary btn-sm">Limpiar med</button>
+        </div>
+
+        <button id="btnEvolReset" type="button" class="btn btn-outline-secondary btn-sm">Reset zoom</button>
       </div>
+    </div>
+
+    <div class="evol-box mt-3">
+      <canvas id="evolPaciente"></canvas>
+    </div>
+    <div id="evolMsg" class="pt-2 text-muted small"></div>
+    <div class="legend-note mt-2">
+      <span class="me-3">🟦 Riesgo (0=POS, 1=NEU, 2=NEG)</span>
+      <span class="me-3">✚ Eventos NEG</span>
     </div>
   </div>
 </div>
 
-<!-- Scripts -->
+<!-- ===================== JS ===================== -->
 <script>
-  // Registrar plugins externos (UMD)
-  try { if (window['chartjs-plugin-zoom']) Chart.register(window['chartjs-plugin-zoom']); } catch(e){}
-  try { if (window['chartjs-plugin-annotation']) Chart.register(window['chartjs-plugin-annotation']); } catch(e){}
+  const SEXO_LABELS = {{ sexo_labels|safe }};
+  const SEXO_DATA   = {{ sexo_data|safe }};
+  const DIAG_LABELS = {{ diag_labels|safe }};
+  const DIAG_DATA   = {{ diag_data|safe }};
+</script>
 
-  // Pie
+<script>
+  // ===== CHARTS SIMPLES =====
   (function(){
-    const el = document.getElementById('sexoChart'); if(!el) return;
-    const labels = {{ sexo_labels|default:'[]'|safe }};
-    const data   = {{ sexo_data|default:'[]'|safe }};
-    new Chart(el,{
-      type:'pie',
-      data:{labels,datasets:[{label:'Pacientes por sexo',data,backgroundColor:['#74c0fc','#63e6be','#ffd43b'],borderColor:'#fff',borderWidth:2}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}
-    });
-  })();
+    const ctx1 = document.getElementById('sexoChart');
+    if (ctx1) {
+      new Chart(ctx1, {
+        type: 'pie',
+        data: {
+          labels: SEXO_LABELS,
+          datasets: [{
+            data: SEXO_DATA,
+            backgroundColor: ['#74c0fc','#63e6be','#ffd43b'],
+            borderColor: '#fff',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          animation:{ animateScale:true, duration:300 },
+          layout: { padding: 8 },
+          plugins: { legend: { position: 'bottom' } }
+        }
+      });
+    }
 
-  // Barras
-  (function(){
-    const el = document.getElementById('diagnosticosChart'); if(!el) return;
-    const labels = {{ diag_labels|default:'[]'|safe }};
-    const data   = {{ diag_data|default:'[]'|safe }};
-    new Chart(el,{
-      type:'bar',
-      data:{labels,datasets:[{label:'Frecuencia',data,backgroundColor:'#339af0'}]},
-      options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,ticks:{stepSize:1}}},plugins:{legend:{display:false}}}
-    });
+    const ctx2 = document.getElementById('diagnosticosChart');
+    if (ctx2) {
+      new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: DIAG_LABELS,
+          datasets: [{
+            label: 'Frecuencia',
+            data: DIAG_DATA,
+            backgroundColor: '#339af0',
+            borderRadius: 6,
+            maxBarThickness: 80
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { top:8, right:12, bottom:8, left:12 } },
+          plugins: { legend: { display:false } },
+          scales: {
+            y: { beginAtZero:true },
+            x: { ticks: { autoSkip: true } }
+          }
+        }
+      });
+    }
   })();
+</script>
 
-  // Utils
-  const DAY_MS = 24*60*60*1000;
-  const toNum = v => (v===null||v===undefined||v==='') ? null : (Number(v));
-  function movingAvg(arr, k=3){
-    if(!Array.isArray(arr)||!arr.length) return [];
-    const h=Math.floor(k/2);
-    return arr.map((_,i)=>{
-      let a=Math.max(0,i-h), b=Math.min(arr.length-1,i+h),sum=0,n=0;
-      for(let j=a;j<=b;j++){ const v=toNum(arr[j]); if(v!==null && Number.isFinite(v)){ sum+=v; n++; } }
-      return n?sum/n:null;
-    });
+<script>
+  // ====== Gráfico de evolución (solo línea azul + eventos) ======
+  function riesgoPointStyle(v){ return v===2?'cross':(v===1?'circle':'rectRounded'); }
+  function riesgoPointColor(v){
+    if (v===2) return 'rgba(231,76,60,1)';
+    if (v===1) return 'rgba(241,196,15,1)';
+    return 'rgba(52,152,219,1)';
   }
 
-  // Franjas POS/NEU/NEG
-  const yBands = {
-    id:'yBands',
-    beforeDraw(chart){
-      const area=chart.chartArea, y=chart.scales?.y, ctx=chart.ctx;
-      if(!area||!y||!y.getPixelForValue) return;
-      const y0=y.getPixelForValue(0), y1=y.getPixelForValue(1), y2=y.getPixelForValue(2);
-      ctx.save();
-      ctx.fillStyle='rgba(40,167,69,.07)'; ctx.fillRect(area.left, Math.min(y0,y1), area.right-area.left, Math.abs(y0-y1));
-      ctx.fillStyle='rgba(108,117,125,.07)'; ctx.fillRect(area.left, Math.min(y1,y2), area.right-area.left, Math.abs(y1-y2));
-      ctx.fillStyle='rgba(220,53,69,.07)'; ctx.fillRect(area.left, area.top, area.right-area.left, Math.abs(y2-area.top));
-      ctx.restore();
-    }
-  };
+  async function dibujarEvolucion(pacienteId) {
+    const desdeInput = document.querySelector('input[name="desde"]')?.value || null;
+    const hastaInput = document.querySelector('input[name="hasta"]')?.value || null;
+    const medSel = document.getElementById('selectMed')?.value || '';
 
-  // Evolución
-  let isLoading=false, evolChart=null, apiURL=null;
+    const url = new URL(`/api/pacientes/${pacienteId}/evolucion/`, window.location.origin);
+    if (desdeInput) url.searchParams.set('desde', desdeInput);
+    if (hastaInput) url.searchParams.set('hasta', hastaInput);
+    if (medSel)     url.searchParams.set('med', medSel);
 
-  function apiUrlFor(id){ return new URL(`/api/pacientes/${id}/evolucion/`, location.origin).toString(); }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const { labels, riesgo, meds, slope, desistio } = data;
 
-  async function cargarGrafico(pid){
-    if(isLoading) return; isLoading=true;
-    const info=document.getElementById('msgEvol');
-    const can = document.getElementById('evolPaciente');
-    const ctx = can.getContext('2d');
-    apiURL = apiUrlFor(pid);
-    document.getElementById('openApi').onclick = ()=> window.open(apiURL,'_blank');
-    info.innerHTML = '<span class="loader"></span> Cargando…';
+    const msg = document.getElementById('evolMsg');
+    const sTxt = (slope === null || slope === undefined) ? 'N/A' : slope.toFixed(3);
+    let extra = desistio ? ' — Desistió (>60 días sin consulta)' : '';
+    msg.textContent = `Tendencia (pendiente): ${sTxt} → <0 mejora | =0 estable | >0 empeora${extra}`;
 
-    try{
-      const existing=Chart.getChart(can); if(existing) existing.destroy();
-      if(evolChart){evolChart.destroy(); evolChart=null;}
+    const negMarkers  = riesgo.map(v => (v === 2 ? 2 : null));
+    const pointColors = riesgo.map(r => riesgoPointColor(r));
+    const pointStyles = riesgo.map(r => riesgoPointStyle(r));
 
-      const r=await fetch(apiURL,{headers:{'Accept':'application/json'}});
-      if(!r.ok){ throw new Error(`HTTP ${r.status}`); }
-      const json=await r.json();
+    if (window._evolChart) window._evolChart.destroy();
 
-      // Convertir a puntos temporales {x:Date,y:Number} y ordenar
-      const labels = (json.labels||[]).map(s=>new Date(s));
-      const riesgo = (json.riesgo||[]).map(toNum);
-      const meds   = json.meds||[];
-
-      if(!labels.length || !riesgo.length){ info.textContent='Sin datos para este paciente.'; return; }
-
-      // Orden temporal
-      const idx = labels.map((d,i)=>({i,d})).sort((a,b)=>a.d-b.d).map(o=>o.i);
-      const pts  = idx.map(i=>({x:labels[i], y: riesgo[i]}));
-      const medsS= idx.map(i=> meds[i]||[]);
-      // Negativos
-      const negEvents = pts.filter(p => p.y===2).map(p => ({x:p.x, y:2}));
-
-      // Suavizado sobre y (ordenado)
-      const suav = movingAvg(pts.map(p=>p.y), 3);
-
-      // Anotaciones de abandono (>60 días entre consultas)
-      const annots = [];
-      for(let i=1;i<pts.length;i++){
-        const gap = pts[i].x - pts[i-1].x;
-        if(gap > 60*DAY_MS){
-          annots.push({
-            type:'line',
-            xMin: pts[i-1].x, xMax: pts[i-1].x,
-            borderColor:'rgba(0,0,0,.3)', borderDash:[4,4], borderWidth:1,
-            label:{enabled:true, content:'Desistió (>60 días sin consulta)', position:'start', yAdjust:-10, backgroundColor:'rgba(255,255,255,.8)', color:'#333', padding:4}
-          });
+    const ctx = document.getElementById('evolPaciente').getContext('2d');
+    window._evolChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Riesgo (0 POS / 1 NEU / 2 NEG)',
+            data: riesgo,
+            borderColor: 'rgba(52,152,219,1)',
+            backgroundColor: 'rgba(52,152,219,0.10)',
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: pointColors,
+            pointBorderColor: pointColors,
+            pointStyle: pointStyles,
+            tension: 0,
+            spanGaps: true,
+            fill: false,
+            clip: false
+          },
+          {
+            label: 'Eventos NEG',
+            data: negMarkers,
+            borderColor: 'rgba(231,76,60,1)',
+            backgroundColor: 'rgba(231,76,60,1)',
+            pointStyle: 'cross',
+            showLine: false,
+            pointRadius: 5,
+            pointHoverRadius: 6,
+            clip: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        normalized: true,
+        interaction: { mode: 'nearest', intersect: false },
+        layout: { padding: { top: 8, right: 28, bottom: 8, left: 12 } },
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              label: (item) => `Riesgo: ${item.parsed.y}`,
+              afterBody: (items) => {
+                const idx = items?.[0]?.dataIndex ?? -1;
+                if (idx < 0 || !Array.isArray(meds[idx])) return '';
+                const lista = meds[idx].slice(0, 8).join(', ');
+                return lista ? `\n💊 ${lista}` : '';
+              }
+            }
+          },
+          zoom: {
+            pan:  { enabled: true, mode: 'x' },
+            zoom: { wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }
+          },
+          annotation: { annotations: {} }
+        },
+        scales: {
+          y: {
+            min: -0.2, max: 2.2,
+            grace: '5%',
+            grid: { color: 'rgba(0,0,0,0.06)' },
+            ticks: {
+              stepSize: 1,
+              callback: v => v===0?'POS (bajo)':(v===1?'NEU (medio)':(v===2?'NEG (alto)':''))
+            }
+          },
+          x: {
+            offset: true,
+            grace: '5%',
+            grid: { color: 'rgba(0,0,0,0.05)' },
+            ticks: { autoSkip: true, maxRotation: 0 }
+          }
         }
       }
+    });
 
-      evolChart = new Chart(ctx,{
-        type:'line',
-        data:{
-          datasets:[
-            {
-              label:'Riesgo (0=POS, 1=NEU, 2=NEG)',
-              data: pts,
-              parsing:false,
-              stepped:true,
-              borderWidth:2,
-              pointRadius:3,
-              pointHoverRadius:6,
-              tension:0,
-              spanGaps:true,
-              borderColor:'#0d6efd',
-              backgroundColor:'rgba(13,110,253,.05)'
-            },
-            {
-              label:'Suavizado (k=3)',
-              data: pts.map((p,i)=> ({x:p.x, y: suav[i]})),
-              parsing:false,
-              borderWidth:2,
-              pointRadius:0,
-              borderDash:[6,4],
-              tension:0.25,
-              spanGaps:true,
-              borderColor:'#6c757d'
-            },
-            {
-              type:'scatter',
-              label:'Eventos NEG',
-              data: negEvents,
-              parsing:false,
-              showLine:false,
-              pointRadius:6,
-              pointHoverRadius:7,
-              pointStyle:'cross',
-              borderColor:'#dc3545',
-              backgroundColor:'#dc3545'
-            }
-          ]
-        },
-        options:{
-          responsive:true,
-          maintainAspectRatio:false,
-          parsing:false,
-          normalized:true,
-          plugins:{
-            legend:{position:'bottom'},
-            tooltip:{
-              callbacks:{
-                title:(items)=> {
-                  const p = items[0]?.raw;
-                  const y = p?.y ?? 0;
-                  const nivel = ['POS (bajo)','NEU (medio)','NEG (alto)'][y] || y;
-                  const d = p?.x ? new Date(p.x) : null;
-                  return d ? d.toISOString().slice(0,10)+' — '+nivel : nivel;
-                },
-                afterBody:(items)=>{
-                  const p = items[0];
-                  if(!p) return [];
-                  const idx = pts.findIndex(pt => +pt.x === +p.raw.x);
-                  const lista = medsS[idx] || [];
-                  return lista.length ? ['Medicamentos:', ...lista.map(m=>'• '+m)] : [];
-                }
-              }
-            },
-            zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} },
-            annotation:{ annotations: annots }
-          },
-          scales:{
-            x:{ type:'time', time:{unit:'month', displayFormats:{month:'MMM yyyy'}}, grid:{color:'#eef1f5'}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:8} },
-            y:{ min:0, max:2, ticks:{ stepSize:1, callback:v=>({0:'POS (bajo)',1:'NEU (medio)',2:'NEG (alto)'}[v] ?? v) }, grid:{color:'#e9ecef'} }
-          }
-        },
-        plugins:[yBands]
-      });
-
-      document.getElementById('resetZoom').onclick = ()=> evolChart.resetZoom();
-      info.textContent='';
-    }catch(err){
-      const existing=Chart.getChart(can); if(existing) existing.destroy();
-      if(evolChart){evolChart.destroy();evolChart=null;}
-      console.error(err);
-      document.getElementById('msgEvol').textContent='No se pudo cargar el gráfico: '+(err?.message||err);
-    }finally{
-      isLoading=false;
+    if (desistio && labels.length) {
+      window._evolChart.options.plugins.annotation.annotations['desist'] = {
+        type: 'label',
+        xValue: labels[labels.length - 1],
+        yValue: 2.05,
+        content: ['Desistió', '(>60 días sin consulta)'],
+        backgroundColor: 'rgba(0,0,0,0.75)',
+        color: '#fff',
+        padding: 6,
+        borderRadius: 6
+      };
+      window._evolChart.update();
     }
   }
 
-  // Init
-  (function(){
-    const select=document.getElementById('pacienteSelect');
-    const initialId={{ initial_paciente_id|default:'null' }};
-    const info=document.getElementById('msgEvol');
+  document.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('selectPaciente');
+    const btnReset = document.getElementById('btnEvolReset');
+    const desde = document.querySelector('input[name="desde"]');
+    const hasta = document.querySelector('input[name="hasta"]');
+    const selMed = document.getElementById('selectMed');
+    const btnMedClear = document.getElementById('btnMedClear');
 
-    if(!select || !select.options.length){
-      if(initialId!==null) cargarGrafico(initialId); else info.textContent='No hay pacientes con consultas para mostrar.'; return;
-    }
-    if(initialId!==null){ select.value=String(initialId); cargarGrafico(initialId); }
-    else { info.textContent='No hay pacientes con consultas para mostrar.'; }
+    const cargar = () => {
+      const id = sel?.value;
+      if (!id) return;
+      dibujarEvolucion(id).catch(e => {
+        console.error(e);
+        const msg = document.getElementById('evolMsg');
+        if (msg) msg.textContent = `No se pudo cargar el gráfico: ${e.message}`;
+      });
+    };
 
-    select.addEventListener('change', e=> cargarGrafico(e.target.value));
-  })();
+    sel?.addEventListener('change', cargar);
+    desde?.addEventListener('change', cargar);
+    hasta?.addEventListener('change', cargar);
+    selMed?.addEventListener('change', cargar);
+    btnMedClear?.addEventListener('click', () => { selMed.value=''; cargar(); });
+    btnReset?.addEventListener('click', () => { try { window._evolChart.resetZoom(); } catch(_){} });
+
+    // primera carga
+    cargar();
+  });
 </script>
 
 </body>
