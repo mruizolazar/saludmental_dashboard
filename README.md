@@ -39,7 +39,7 @@ cd saludmental_dashboard
 **Windows (PowerShell):**
 ```bash
 python -m venv venv
-.env\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1
 ```
 
 **Linux / macOS:**
